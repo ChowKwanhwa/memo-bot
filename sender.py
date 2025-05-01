@@ -1,4 +1,4 @@
-#如果是topic，使用flag --topic，并指定topic-id，如python sender.py --topic --topic-id 3
+# 如果是topic，使用flag --topic，并指定topic-id，如python sender.py --topic --topic-id 3
 
 import os
 import pandas as pd
@@ -12,7 +12,45 @@ from dotenv import load_dotenv
 from telethon.tl.functions.channels import JoinChannelRequest
 import argparse
 import json
+import logging
+from logging.handlers import RotatingFileHandler
+import datetime
 from config import PROXY_LIST  # Import proxy list from config.py
+
+# 配置日志
+def setup_logging():
+    """设置日志配置"""
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        
+    log_file = os.path.join(log_dir, f"memolabs_{datetime.datetime.now().strftime('%Y%m%d')}.log")
+    
+    # 创建 RotatingFileHandler，限制单个日志文件大小为 1MB，最多保留 5 个备份
+    file_handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=1024*1024,  # 1MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    
+    # 设置日志格式
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    
+    # 配置根日志记录器
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+    
+    # 减少一些不必要的日志
+    logging.getLogger('telethon').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    
+    return logger
+
+# 初始化日志
+logger = setup_logging()
 
 # 加载.env文件
 load_dotenv()
@@ -45,9 +83,9 @@ try:
     # 反转DataFrame，使最早的消息（底部）在前面
     df = df.iloc[::-1]
     messages = df.to_dict('records')
-    print(f"Successfully loaded {len(messages)} messages from CSV file")
+    logger.info(f"Successfully loaded {len(messages)} messages from CSV file")
 except Exception as e:
-    print(f"Error reading CSV file: {e}")
+    logger.error(f"Error reading CSV file: {e}")
     messages = []
 
 # 表情符号列表用于reactions
@@ -59,24 +97,24 @@ async def try_connect_with_proxy(session_file, proxy_config):
     client = TelegramClient(session_path, API_ID, API_HASH, proxy=proxy_config)
     
     try:
-        print(f"正在尝试使用代理 {proxy_config['addr']}:{proxy_config['port']} 连接...")
+        logger.info(f"正在尝试使用代理 {proxy_config['addr']}:{proxy_config['port']} 连接...")
         await client.connect()
         
         if await client.is_user_authorized():
             me = await client.get_me()
-            print(f"[成功] 使用代理 {proxy_config['addr']} 连接成功!")
-            print(f"       账号: {me.first_name} (@{me.username})")
+            logger.info(f"[成功] 使用代理 {proxy_config['addr']} 连接成功!")
+            logger.info(f"       账号: {me.first_name} (@{me.username})")
             return client
         
         await client.disconnect()
-        print(f"[失败] 使用代理 {proxy_config['addr']} 连接失败: 未授权")
+        logger.warning(f"[失败] 使用代理 {proxy_config['addr']} 连接失败: 未授权")
         return None
         
     except Exception as e:
         error_str = str(e)
-        print(f"[失败] 使用代理 {proxy_config['addr']} 连接失败: {error_str}")
+        logger.error(f"[失败] 使用代理 {proxy_config['addr']} 连接失败: {error_str}")
         if "Proxy connection timed out" in error_str:
-            print("代理超时，将尝试下一个代理...")
+            logger.info("代理超时，将尝试下一个代理...")
         try:
             await client.disconnect()
         except:
@@ -88,10 +126,10 @@ async def try_join_channel(client, channel_url):
     try:
         channel = await client.get_entity(channel_url)
         await client(JoinChannelRequest(channel))
-        print(f"成功加入频道: {channel_url}")
+        logger.info(f"成功加入频道: {channel_url}")
         return True
     except Exception as e:
-        print(f"加入频道失败: {str(e)}")
+        logger.error(f"加入频道失败: {str(e)}")
         return False
 
 async def init_clients():
@@ -117,7 +155,7 @@ async def init_clients():
                     client = None
         
         if not client:
-            print(f"警告: {session_file} 所有代理均连接失败或无法加入频道!")
+            logger.warning(f"警告: {session_file} 所有代理均连接失败或无法加入频道!")
     
     return clients
 
@@ -148,29 +186,29 @@ async def process_action(client, message_data, recent_messages, use_topic, topic
                 kwargs['reply_to'] = topic_id
                 
             msg_type = message_data['type']
-            media_path = message_data.get('media_file', '')  # Default to empty string if no media
+            media_path = message_data.get('media_file', '')
             
-            if media_path and msg_type in ['sticker', 'video', 'photo', 'file']:  # 只处理有媒体文件的消息
+            if media_path and msg_type in ['sticker', 'video', 'photo', 'file']:
                 full_path = os.path.join(os.getcwd(), MEDIA_DIR, os.path.basename(media_path))
                 if msg_type in ['sticker', 'video', 'photo']:
                     try:
                         success = await send_media_with_metadata(client, channel, full_path, msg_type, **kwargs)
                         if not success:
-                            print(f"Falling back to direct file send for: {full_path}")
+                            logger.debug(f"Falling back to direct file send for: {full_path}")
                             if msg_type == 'sticker':
-                                print("Skipping direct file send for sticker")
+                                logger.debug("Skipping direct file send for sticker")
                             else:
                                 await client.send_file(channel, full_path, **kwargs)
                     except Exception as e:
-                        print(f"Error sending media: {str(e)}")
-                        if msg_type != 'sticker':  # Don't try to send stickers directly
+                        logger.error(f"Error sending media: {str(e)}")
+                        if msg_type != 'sticker':
                             await client.send_file(channel, full_path, **kwargs)
-                else:  # 对于其他类型的文件直接发送
+                else:
                     await client.send_file(channel, full_path, **kwargs)
             elif message_data['content'] and message_data['content'] not in ['[PHOTO]', '[FILE]', '[STICKER]']:
                 await client.send_message(channel, message_data['content'], **kwargs)
             return
-            
+
         random_value = random.random()
         
         if random_value < 0.15:  # 15% 概率发送表情反应
@@ -186,7 +224,7 @@ async def process_action(client, message_data, recent_messages, use_topic, topic
             ))
             me = await client.get_me()
             username = f"@{me.username}" if me.username else me.id
-            print(f"{username} 对消息ID {target_message.id} 进行了{reaction_text}反应")
+            logger.info(f"{username} 对消息ID {target_message.id} 进行了{reaction_text}反应")
             
         elif random_value < 0.40:  # 25% 概率回复消息
             target_message = random.choice(recent_messages)
@@ -204,30 +242,30 @@ async def process_action(client, message_data, recent_messages, use_topic, topic
                 kwargs['reply_to'] = topic_id
                 
             msg_type = message_data['type']
-            media_path = message_data.get('media_file', '')  # Default to empty string if no media
+            media_path = message_data.get('media_file', '')
             
-            if media_path and msg_type in ['sticker', 'video', 'photo', 'file']:  # 只处理有媒体文件的消息
+            if media_path and msg_type in ['sticker', 'video', 'photo', 'file']:
                 full_path = os.path.join(os.getcwd(), MEDIA_DIR, os.path.basename(media_path))
                 if msg_type in ['sticker', 'video', 'photo']:
                     try:
                         success = await send_media_with_metadata(client, channel, full_path, msg_type, **kwargs)
                         if not success:
-                            print(f"Falling back to direct file send for: {full_path}")
+                            logger.debug(f"Falling back to direct file send for: {full_path}")
                             if msg_type == 'sticker':
-                                print("Skipping direct file send for sticker")
+                                logger.debug("Skipping direct file send for sticker")
                             else:
                                 await client.send_file(channel, full_path, **kwargs)
                     except Exception as e:
-                        print(f"Error sending media: {str(e)}")
-                        if msg_type != 'sticker':  # Don't try to send stickers directly
+                        logger.error(f"Error sending media: {str(e)}")
+                        if msg_type != 'sticker':
                             await client.send_file(channel, full_path, **kwargs)
-                else:  # 对于其他类型的文件直接发送
+                else:
                     await client.send_file(channel, full_path, **kwargs)
             elif message_data['content'] and message_data['content'] not in ['[PHOTO]', '[FILE]', '[STICKER]']:
                 await client.send_message(channel, message_data['content'], **kwargs)
                 
     except Exception as e:
-        print(f"Error processing action: {str(e)}")
+        logger.error(f"Error processing action: {str(e)}")
 
 async def process_action_with_retry(client, message_data, recent_messages, use_topic, topic_id, session_file):
     """处理动作，如果出现连接错误则尝试重新连接"""
@@ -236,14 +274,14 @@ async def process_action_with_retry(client, message_data, recent_messages, use_t
     except Exception as e:
         error_str = str(e)
         if "Proxy connection timed out" in error_str:
-            print(f"代理连接超时，尝试重新连接...")
+            logger.info(f"代理连接超时，尝试重新连接...")
             new_client = await reconnect_client(client, session_file)
             if new_client:
-                print("重新连接成功，重试操作...")
+                logger.info("重新连接成功，重试操作...")
                 await process_action(new_client, message_data, recent_messages, use_topic, topic_id)
                 return new_client
         else:
-            print(f"Error processing action: {error_str}")
+            logger.error(f"Error processing action: {error_str}")
     return client
 
 async def send_media_with_metadata(client, channel, media_path, msg_type, **kwargs):
@@ -272,7 +310,7 @@ async def send_media_with_metadata(client, channel, media_path, msg_type, **kwar
             await client.send_file(channel, document, **kwargs)
             return True
     except Exception as e:
-        print(f"Error sending media with metadata: {str(e)}")
+        logger.error(f"Error sending media with metadata: {str(e)}")
         return False
 
 async def get_recent_messages(client, limit=5, use_topic=False, topic_id=None):
@@ -288,17 +326,17 @@ async def get_recent_messages(client, limit=5, use_topic=False, topic_id=None):
 async def main():
     args = parse_args()
     topic_id = args.topic_id if args.topic else None
-    print(f"Using topic mode: {args.topic}, topic ID: {topic_id}")
-    print(f"Loop mode: {args.loop}")
+    logger.info(f"Using topic mode: {args.topic}, topic ID: {topic_id}")
+    logger.info(f"Loop mode: {args.loop}")
     
     # 使用新的初始化方法
     clients = await init_clients()
     
     if not clients:
-        print("错误: 没有成功连接的客户端!")
+        logger.error("错误: 没有成功连接的客户端!")
         return
     
-    print(f"成功初始化 {len(clients)} 个客户端")
+    logger.info(f"成功初始化 {len(clients)} 个客户端")
     
     # 保存session文件名与客户端的映射
     session_files = [f for f in os.listdir(SESSIONS_DIR) if f.endswith('.session')]
@@ -313,7 +351,7 @@ async def main():
                                                           use_topic=args.topic, 
                                                           topic_id=topic_id)
             except Exception as e:
-                print(f"获取最近消息失败: {str(e)}")
+                logger.error(f"获取最近消息失败: {str(e)}")
                 recent_messages = []
             
             batch_messages = messages[i:i + len(clients)]
@@ -334,11 +372,11 @@ async def main():
                     clients[clients.index(client)] = new_client
                     client_sessions[new_client] = client_sessions.pop(client)
                 
-                await asyncio.sleep(random.uniform(4, 10))
+                await asyncio.sleep(random.uniform(9, 20))
         
         if not args.loop:  # 如果不是循环模式，跳出循环
             break
-        print("所有消息发送完成，开始新一轮发送...")
+        logger.info("所有消息发送完成，开始新一轮发送...")
         await asyncio.sleep(1)  # 在重新开始前稍作暂停
     
     # 关闭所有客户端
