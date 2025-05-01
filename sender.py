@@ -25,8 +25,8 @@ API_HASH = os.getenv("API_HASH")
 TARGET_GROUP = "https://t.me/MemoLabsio"
 TOPIC_ID = 1
 SESSIONS_DIR = "sessions/memolabs"
-MESSAGES_FILE = "Memolabs/Memolabs_messages.csv"  # Using forward slashes instead of backslash
-MEDIA_DIR = os.path.join("Memolabs", "media")  # Add media directory path
+MESSAGES_FILE = "MemoLabs/MemoLabs_messages.csv"  # Using forward slashes instead of backslash
+MEDIA_DIR = os.path.join("MemoLabs", "media")  # Add media directory path
 
 # 读取消息数据
 try:
@@ -334,7 +334,7 @@ async def main():
                     clients[clients.index(client)] = new_client
                     client_sessions[new_client] = client_sessions.pop(client)
                 
-                await asyncio.sleep(random.uniform(20, 50))
+                await asyncio.sleep(random.uniform(4, 10))
         
         if not args.loop:  # 如果不是循环模式，跳出循环
             break

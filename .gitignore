@@ -49,5 +49,7 @@ wheels/
 *.egg
 MANIFEST
 
-# Ignore Memolabs directory
-Memolabs/
+
+# Ignore SSH keys
+Memobot
+Memobot.pub
