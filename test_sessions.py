@@ -11,7 +11,7 @@ API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 
 # 会话目录
-SESSIONS_DIR = "hopperday2"
+SESSIONS_DIR = "sessions/memolabs"
 
 # 代理列表
 PROXY_LIST = [
@@ -111,4 +111,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+
 

@@ -1,9 +1,21 @@
+# Logs
+logs/
+*.log
+
+# Session files
+*.session
+*.session-journal
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Environment
+.env
+venv/
 env/
 build/
 develop-eggs/
@@ -20,8 +32,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-venv/
-
 
 # IDE specific
 .idea/
