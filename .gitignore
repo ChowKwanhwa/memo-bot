@@ -48,3 +48,6 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Ignore Memolabs directory
+Memolabs/
