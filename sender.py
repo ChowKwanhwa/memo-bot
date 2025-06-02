@@ -280,11 +280,12 @@ async def main():
     
     # 确定哪些组需要运行
     groups_to_run = []
-    if args.group:
-        if args.group not in GROUP_CONFIGS:
-            print(f"Error: Group '{args.group}' not found in configuration")
-            return
-        groups_to_run = [args.group]
+    if args.groups:
+        for group in args.groups:
+            if group not in GROUP_CONFIGS:
+                print(f"Error: Group '{group}' not found in configuration")
+                continue
+            groups_to_run.append(group)
     else:
         # 只运行有session目录的组
         for group_name, config in GROUP_CONFIGS.items():
@@ -343,8 +344,8 @@ def parse_args():
                        help='Topic ID for forum channels')
     parser.add_argument('--loop', action='store_true',
                        help='Enable continuous message sending mode')
-    parser.add_argument('--group', type=str,
-                       help='Specify a group to run (e.g., memolabs, Hopper). If not specified, all groups will run.')
+    parser.add_argument('--groups', nargs='+', type=str,
+                       help='Specify groups to run (e.g., --groups memolabs superexcn). If not specified, all groups will run.')
     args = parser.parse_args()
     
     # 命令行参数覆盖组配置
