@@ -2,9 +2,6 @@
 logs/
 *.log
 
-# Session files
-*.session
-*.session-journal
 
 # Python
 __pycache__/
