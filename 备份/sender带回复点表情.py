@@ -32,12 +32,24 @@ async def try_connect_with_proxy(sessions_dir, session_file, proxy_config):
     client = TelegramClient(session_path, API_ID, API_HASH, proxy=proxy_config)
     
     try:
+        print(f"Trying to connect using proxy {proxy_config['addr']}:{proxy_config['port']}...")
         await client.connect()
+        
         if await client.is_user_authorized():
+            me = await client.get_me()
+            print(f"[Success] Connected using proxy {proxy_config['addr']}!")
+            print(f"         Account: {me.first_name} (@{me.username})")
             return client
+        
         await client.disconnect()
+        print(f"[Failed] Connection failed with proxy {proxy_config['addr']}: Unauthorized")
         return None
+        
     except Exception as e:
+        error_str = str(e)
+        print(f"[Failed] Connection failed with proxy {proxy_config['addr']}: {error_str}")
+        if "Proxy connection timed out" in error_str:
+            print("Proxy timeout, trying next proxy...")
         try:
             await client.disconnect()
         except:
@@ -47,8 +59,33 @@ async def try_connect_with_proxy(sessions_dir, session_file, proxy_config):
 async def try_join_channel(client, channel_url):
     """尝试加入频道"""
     try:
+        # First try to get the channel entity
         channel = await client.get_entity(channel_url)
-        return True
+        
+        try:
+            # Check if we're already in the channel
+            participant = await client.get_participants(channel, limit=1)
+            print(f"Already a member of channel: {channel_url}")
+            return True
+        except Exception:
+            # If we can't get participants, we're probably not in the channel
+            try:
+                await client(JoinChannelRequest(channel))
+                print(f"Successfully joined channel: {channel_url}")
+                return True
+            except Exception as e:
+                if "CHANNELS_TOO_MUCH" in str(e):
+                    print(f"Cannot join more channels (limit reached): {channel_url}")
+                    return True  # Return True since this is not a fatal error
+                elif "FLOOD_WAIT_" in str(e):
+                    wait_time = int(''.join(filter(str.isdigit, str(e))))
+                    print(f"Need to wait {wait_time} seconds before joining channel")
+                    if wait_time < 300:  # Only wait if it's less than 5 minutes
+                        await asyncio.sleep(wait_time)
+                        await client(JoinChannelRequest(channel))
+                        return True
+                print(f"Failed to join channel: {str(e)}")
+                return False
     except Exception as e:
         print(f"Error getting channel info: {str(e)}")
         return False
@@ -59,10 +96,25 @@ async def init_clients(sessions_dir, target_group):
     clients = []
     
     for session_file in session_files:
-        proxy = random.choice(PROXY_LIST)
-        client = await try_connect_with_proxy(sessions_dir, session_file, proxy)
-        if client:
-            clients.append(client)
+        client = None
+        proxy_list = PROXY_LIST.copy()
+        random.shuffle(proxy_list)
+        
+        for proxy in proxy_list:
+            client = await try_connect_with_proxy(sessions_dir, session_file, proxy)
+            if client:
+                # Even if we can't join the channel, keep the client if it connects
+                if await client.is_user_authorized():
+                    clients.append(client)
+                    # Try to join channel but don't fail if we can't
+                    await try_join_channel(client, target_group)
+                    break
+                else:
+                    await client.disconnect()
+                    client = None
+        
+        if not client:
+            print(f"Warning: {session_file} failed to connect with all proxies!")
     
     return clients
 
@@ -110,28 +162,90 @@ async def process_action(client, message_data, recent_messages, use_topic, topic
     """处理一个动作"""
     try:
         channel = await client.get_entity(target_group)
-        kwargs = {}
-        if use_topic:
-            kwargs['reply_to'] = topic_id
+        
+        if not recent_messages:
+            kwargs = {}
+            if use_topic:
+                kwargs['reply_to'] = topic_id
+                
+            msg_type = message_data['type']
+            media_path = message_data.get('media_file', '')
             
-        content = message_data['content']
-        if content and content not in ['[PHOTO]', '[FILE]', '[STICKER]']:
-            await client.send_message(channel, content, **kwargs)
-            return
-            
-        msg_type = message_data['type']
-        media_path = message_data.get('media_file', '')
-        if media_path and msg_type in ['sticker', 'video', 'photo', 'file']:
-            full_path = os.path.join(os.getcwd(), media_dir, os.path.basename(media_path))
-            try:
-                if msg_type == 'sticker':
-                    success = await send_media_with_metadata(client, channel, full_path, msg_type, **kwargs)
-                    if not success:
-                        return
+            if media_path and msg_type in ['sticker', 'video', 'photo', 'file']:
+                full_path = os.path.join(os.getcwd(), media_dir, os.path.basename(media_path))
+                if msg_type in ['sticker', 'video', 'photo']:
+                    try:
+                        success = await send_media_with_metadata(client, channel, full_path, msg_type, **kwargs)
+                        if not success:
+                            print(f"Falling back to direct file send for: {full_path}")
+                            if msg_type == 'sticker':
+                                print("Skipping direct file send for sticker")
+                            else:
+                                await client.send_file(channel, full_path, **kwargs)
+                    except Exception as e:
+                        print(f"Error sending media: {str(e)}")
+                        if msg_type != 'sticker':
+                            await client.send_file(channel, full_path, **kwargs)
                 else:
                     await client.send_file(channel, full_path, **kwargs)
-            except Exception as e:
-                print(f"Error sending media: {str(e)}")
+            elif message_data['content'] and message_data['content'] not in ['[PHOTO]', '[FILE]', '[STICKER]']:
+                await client.send_message(channel, message_data['content'], **kwargs)
+            return
+            
+        random_value = random.random()
+        
+        if random_value < 0.15:
+            target_message = random.choice(recent_messages)
+            chosen_emoji = random.choice(REACTION_EMOJIS)
+            reaction = [ReactionEmoji(emoticon=chosen_emoji)]
+            reaction_text = '点赞' if chosen_emoji == '👍' else f'表情({chosen_emoji})'
+            
+            await client(SendReactionRequest(
+                peer=channel,
+                msg_id=target_message.id,
+                reaction=reaction
+            ))
+            me = await client.get_me()
+            username = f"@{me.username}" if me.username else me.id
+            print(f"{username} reacted to message ID {target_message.id} with {reaction_text}")
+            
+        elif random_value < 0.40:
+            target_message = random.choice(recent_messages)
+            kwargs = {'reply_to': target_message.id}
+            if use_topic:
+                kwargs['reply_to'] = topic_id
+                
+            content = message_data['content']
+            if content and content not in ['[PHOTO]', '[FILE]', '[STICKER]']:
+                await client.send_message(channel, content, **kwargs)
+            
+        else:
+            kwargs = {}
+            if use_topic:
+                kwargs['reply_to'] = topic_id
+                
+            msg_type = message_data['type']
+            media_path = message_data.get('media_file', '')
+            
+            if media_path and msg_type in ['sticker', 'video', 'photo', 'file']:
+                full_path = os.path.join(os.getcwd(), media_dir, os.path.basename(media_path))
+                if msg_type in ['sticker', 'video', 'photo']:
+                    try:
+                        success = await send_media_with_metadata(client, channel, full_path, msg_type, **kwargs)
+                        if not success:
+                            print(f"Falling back to direct file send for: {full_path}")
+                            if msg_type == 'sticker':
+                                print("Skipping direct file send for sticker")
+                            else:
+                                await client.send_file(channel, full_path, **kwargs)
+                    except Exception as e:
+                        print(f"Error sending media: {str(e)}")
+                        if msg_type != 'sticker':
+                            await client.send_file(channel, full_path, **kwargs)
+                else:
+                    await client.send_file(channel, full_path, **kwargs)
+            elif message_data['content'] and message_data['content'] not in ['[PHOTO]', '[FILE]', '[STICKER]']:
+                await client.send_message(channel, message_data['content'], **kwargs)
                 
     except Exception as e:
         print(f"Error processing action: {str(e)}")
@@ -235,7 +349,29 @@ async def run_group(group_name, config, loop_mode):
     session_files = [f for f in os.listdir(config['sessions_dir']) if f.endswith('.session')]
     client_sessions = dict(zip(clients, session_files))
     
+    # 为每个群组维护一个最近消息缓存
+    recent_messages_cache = []
+    last_update_time = 0
+    UPDATE_INTERVAL = 60  # 每60秒更新一次最近消息缓存
+    
     while True:  # 主循环
+        current_time = time.time()
+        
+        # 定期更新最近消息缓存
+        if current_time - last_update_time > UPDATE_INTERVAL:
+            try:
+                recent_messages_cache = await get_recent_messages(
+                    clients[0], 
+                    limit=10,  # 获取更多消息作为缓存
+                    use_topic=config['use_topic'],
+                    topic_id=config['topic_id'],
+                    target_group=config['target_group']
+                )
+                last_update_time = current_time
+                print(f"Updated recent messages cache for {group_name}, found {len(recent_messages_cache)} messages")
+            except Exception as e:
+                print(f"Failed to update recent messages cache for {group_name}: {str(e)}")
+        
         for i in range(0, len(messages), len(clients)):
             batch_messages = messages[i:i + len(clients)]
             if not batch_messages:
@@ -246,14 +382,22 @@ async def run_group(group_name, config, loop_mode):
             
             for msg, client in zip(batch_messages, available_clients):
                 try:
-                    await process_action_with_retry(
-                        client, msg, [],
+                    # 使用缓存的最近消息
+                    recent_messages = recent_messages_cache[-5:] if recent_messages_cache else []
+                    
+                    new_client = await process_action_with_retry(
+                        client, msg, recent_messages,
                         config['use_topic'], config['topic_id'],
                         os.path.join(config['sessions_dir'], client_sessions[client]),
                         config['target_group'],
                         config['media_dir']
                     )
                     
+                    if new_client and new_client != client:
+                        clients[clients.index(client)] = new_client
+                        client_sessions[new_client] = client_sessions.pop(client)
+                    
+                    # 使用组特定的睡眠时间
                     sleep_time = random.uniform(
                         config['sleep_time']['min'],
                         config['sleep_time']['max']

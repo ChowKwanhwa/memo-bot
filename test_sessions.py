@@ -11,13 +11,13 @@ API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 
 # 会话目录
-SESSIONS_DIR = "sessions/memolabs"
+SESSIONS_DIR = "sessions/测试"
 
 # 代理列表
 PROXY_LIST = [
     {
         'proxy_type': 'socks5',  # 添加代理类型
-        'addr': '45.206.3.125',
+        'addr': '45.206.40.201',
         'port': 50101,
         'username': 'zhouhaha',
         'password': '963091790'

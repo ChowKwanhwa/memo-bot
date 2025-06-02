@@ -59,6 +59,9 @@ wheels/
 *.egg
 MANIFEST
 
+# Messages and Media (except SuperExCN)
+Messages and Media/*
+!Messages and Media/SuperExCN
 
 # Ignore SSH keys
 Memobot

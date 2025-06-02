@@ -15,11 +15,12 @@ API_HASH = os.getenv("API_HASH")
 # 代理列表
 PROXY_LIST = [
     {
-        'addr': '31.131.167.47',
-        'port': 12324,
-        'username': '14a91e96097d5',
-        'password': 'e48a23adb8'
-    },
+        'proxy_type': 'socks5',  # 添加代理类型
+        'addr': '45.206.40.213',
+        'port': 50101,
+        'username': 'zhouhaha',
+        'password': '963091790'
+    }
 ]
 
 async def test_telegram_proxy(proxy):

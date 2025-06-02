@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 PROXY_LIST = [
     {
         'proxy_type': 'socks5',  # 添加代理类型
-        'addr': '45.206.3.125',
+        'addr': '45.206.40.201',
         'port': 50101,
         'username': 'zhouhaha',
         'password': '963091790'
@@ -24,7 +24,7 @@ api_hash = os.getenv('API_HASH')
 
 # 配置
 GROUP_USERNAME = 'https://t.me/MemoLabsio'  # 目标群组用户名
-SESSIONS_DIR = r'E:\memolabs-bot\hopperday2'  # session文件目录
+SESSIONS_DIR = 'sessions/memolabs'  # session文件目录
 
 async def try_connect_with_proxy(session_file, proxy_config):
     """尝试使用特定代理连接"""
@@ -80,7 +80,7 @@ async def process_account(session_file):
         print(f"\n使用账号 {me.first_name} (@{me.username}) 处理中...")
         
         # 随机延迟4-6秒
-        delay = random.uniform(4, 6)
+        delay = random.uniform(1, 2)
         print(f"等待 {delay:.2f} 秒...")
         await asyncio.sleep(delay)
         
