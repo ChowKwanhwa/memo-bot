@@ -3,6 +3,7 @@ import asyncio
 from telethon import TelegramClient, errors
 from dotenv import load_dotenv
 import sys
+from config import PROXY_LIST
 
 # 加载环境变量
 load_dotenv()
@@ -13,17 +14,6 @@ API_HASH = os.getenv("API_HASH")
 
 # 会话目录
 SESSIONS_DIR = "hopperday2"
-
-# 代理列表
-PROXY_LIST = [
-    {
-        'proxy_type': 'socks5',  # 添加代理类型
-        'addr': '45.206.40.213',
-        'port': 50101,
-        'username': 'zhouhaha',
-        'password': '963091790'
-    }
-]
 
 async def try_connect_with_proxy(phone_number, proxy_config):
     """尝试使用代理连接"""

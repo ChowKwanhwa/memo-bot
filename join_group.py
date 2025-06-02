@@ -3,17 +3,7 @@ import os
 import random
 import asyncio
 from dotenv import load_dotenv
-
-# 代理列表
-PROXY_LIST = [
-    {
-        'proxy_type': 'socks5',  # 添加代理类型
-        'addr': '45.206.40.201',
-        'port': 50101,
-        'username': 'zhouhaha',
-        'password': '963091790'
-    }
-]
+from config import PROXY_LIST
 
 # 加载环境变量
 load_dotenv()

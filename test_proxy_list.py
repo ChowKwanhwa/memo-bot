@@ -4,6 +4,7 @@ from telethon.sessions import StringSession
 import time
 from dotenv import load_dotenv
 import os
+from config import PROXY_LIST
 
 # 加载环境变量
 load_dotenv()
@@ -12,16 +13,7 @@ load_dotenv()
 API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 
-# 代理列表
-PROXY_LIST = [
-    {
-        'proxy_type': 'socks5',  # 添加代理类型
-        'addr': '45.206.40.213',
-        'port': 50101,
-        'username': 'zhouhaha',
-        'password': '963091790'
-    }
-]
+
 
 async def test_telegram_proxy(proxy):
     """测试代理与Telegram的连接"""
