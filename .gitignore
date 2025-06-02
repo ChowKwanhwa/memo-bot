@@ -56,9 +56,15 @@ wheels/
 *.egg
 MANIFEST
 
-# Messages and Media (except SuperExCN)
+# Messages and Media (except SuperExCN and MemoLabs2)
 Messages and Media/*
 !Messages and Media/SuperExCN
+!Messages and Media/MemoLabs2
+
+# Explicitly ignore these directories
+Messages and Media/Hopper/
+Messages and Media/MemoLabs/
+Messages and Media/SuperEx/
 
 # Ignore SSH keys
 Memobot
